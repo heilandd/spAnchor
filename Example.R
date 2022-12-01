@@ -48,6 +48,7 @@ ref.new <- subset(ref, cells=rownames(ref@meta.data)[ref@meta.data$annotation_le
 rm(ref)
 
 base::options(future.globals.maxSize = 6000 * 1024^2)
+
 reference <-DownScaleSeurat(ref.new, "annotation_level_4", max=10000, min=50)
 rm(ref.new)
 
