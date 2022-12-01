@@ -487,25 +487,32 @@ runMappingGA <- function (object,
         # 5. Mutation
         nr_mut=mutation.vec[z]
         offspring <- map(.x=1:7, .f=function(.x){
-
+          
           # random parent
           gender <- runif(1, 1, 2) %>% round()
-
+          
           mut <- cross[gender][[1]]
           non_mutual <- type[!c(names(type) %in% mut)]
-
+          
           mut.pos <- sample(mut, nr_mut)
           subtype <- type[names(type) %in% mut.pos]
-
+          
           # get the random new cells
-          new.cells <- map(1:nr_mut, .f=~ sample(non_mutual[non_mutual == subtype[.x]], 1) ) %>% unlist()
-
+          new.cells <- map(1:nr_mut, .f=function(.x){
+            if(length(non_mutual[non_mutual == subtype[.x]])==0){
+              sample(type[type == subtype[.x]], 1)
+            }else{
+              sample(non_mutual[non_mutual == subtype[.x]], 1)
+            }
+            
+          }) %>% unlist()
+          
           final <- c(mut[!c(mut %in% mut.pos)], names(new.cells))
-
+          
           return(final)
         })
 
-        map(.x=offspring, .f= ~ unique(type[names(type) %in% .x]) %in% select$celltypes)
+        #map(.x=offspring, .f= ~ unique(type[names(type) %in% .x]) %in% select$celltypes)
 
         # 6. Remove the tail and add offsprings
         remove <- names(fitness[c(length(fitness)-length(offspring)+1):length(fitness)]) %>% as.numeric()
