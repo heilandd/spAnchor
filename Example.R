@@ -19,9 +19,9 @@ sample <- obj.wt$files[nr]
 
 object <- readRDS(obj.wt$path[nr])
 
-
-object <- SPATADeconvolution::inferCellPositionsfromHE(object, "~/Desktop/SpatialTranscriptomics/Visium/Visium/275_T")
-cell_counts <- runSegmentfromCoords(object)
+library(spAnchor)
+object <- spAnchor::inferCellPositionsfromHE(object, "~/Desktop/SpatialTranscriptomics/Visium/Visium/275_T")
+cell_counts <- spAnchor::runSegmentfromCoords(object)
 object <- SPATA2::addFeatures(object, cell_counts$Feature_cells, overwrite = T)
 
 colors <- readRDS("~/Desktop/ImmunoSpatial/Paper/colors_cell_deconv.RDS")
@@ -48,16 +48,16 @@ ref.new <- subset(ref, cells=rownames(ref@meta.data)[ref@meta.data$annotation_le
 rm(ref)
 
 base::options(future.globals.maxSize = 6000 * 1024^2)
-reference <- SPATADeconvolution::DownScaleSeurat(ref.new, "annotation_level_4", max=10000)
+reference <-DownScaleSeurat(ref.new, "annotation_level_4", max=10000, min=50)
 rm(ref.new)
 
 base::options(future.globals.maxSize = 600 * 1024^2)
-metaSpace <- SPATADeconvolution::defineMetaSpace(object, reference, cell_type_var="annotation_level_4", scDF=cell_types)
+metaSpace <- spAnchor::defineMetaSpace(object, reference, cell_type_var="annotation_level_4", scDF=cell_types)
 gc()
 
 
 save <- readRDS("save.RDS")
-cell_map <- SPATADeconvolution::runMappingGA(object=save$object,
+cell_map <- spAnchor::runMappingGA(object=save$object,
                                              reference=save$reference,
                                              cell_type_var="annotation_level_4",
                                              scDF=save$cell_types,

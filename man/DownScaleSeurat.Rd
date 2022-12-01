@@ -8,6 +8,7 @@ DownScaleSeurat(
   seurat,
   maintain_var = "cell_states",
   max = 10000,
+  min = 50,
   only_var = T,
   factor = 5,
   n_feature = 3000
