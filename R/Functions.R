@@ -144,12 +144,11 @@ getSingleCellDeconv <- function(object,
 
   grid.plot <- SPATA2::getCoordsDf(object)
 
-
   if(multicore==T){
 
     # Run multicore
     base::options(future.fork.enable = TRUE)
-    future::plan("multiprocess", workers = workers)
+    future::plan("multisession", workers = workers)
     future::supportsMulticore()
     base::options(future.globals.maxSize = 600 * 1024^2)
     message("... Run multicore ... ")
@@ -192,7 +191,8 @@ getSingleCellDeconv <- function(object,
 
 
 
-  }else{
+  }
+  else{
 
     #plot(sc_dat$x, sc_dat$y, pch=".")
     segments <- map_dfr(.x=nrow(grid.plot), .f=function(x){
@@ -288,6 +288,76 @@ getSingleCellDeconv <- function(object,
 }
 
 
+getCellperSpot <- function(object,
+                           deconv_cell_types,
+                           segments){
+  
+  #segments <- segments %>% filter(segments$Nr_of_cells>0)
+  
+  sc_dat <- SPATAwrappers::getNucleusPosition(object)
+  grid.plot <- SPATA2::getCoordsDf(object)
+  deconv_df <- SPATA2::getFeatureDf(object) %>% dplyr::select(barcodes,all_of(deconv_cell_types))
+  
+  # Run a cell type quantification per spot
+  Cell_types <- map_dfr(.x=1:nrow(grid.plot),
+                        .f=function(x){
+                                        
+                                        #print(x)
+                                        
+                                        out <-
+                                          segments %>%
+                                          dplyr::filter(barcodes==grid.plot$barcodes[x])
+                                        
+                                        #Get the best cells
+                                        nr.cells <- nrow(out)
+                                        
+                                        scores <-
+                                          deconv_df %>%
+                                          dplyr::filter(barcodes==grid.plot$barcodes[x]) %>%
+                                          dplyr::select(-barcodes) %>%
+                                          t() %>% as.data.frame() %>%
+                                          dplyr::arrange(desc(V1)) %>%
+                                          dplyr::mutate(score=scales::rescale(V1, c(0,1)) %>% round(.,digits = 3)) %>%
+                                          dplyr::mutate(cells=round(score*c(nr.cells/sum(score))+0.5 ,digits = 0)) %>%
+                                          dplyr::select(-V1)
+                                        
+                                        i <- 1
+                                        cells_select=0
+                                        while (cells_select < nr.cells) {
+                                          cells_select <- cells_select+scores$cells[i]
+                                          #print(cells_select)
+                                          i=i+1
+                                        }
+                                        scores <- scores[1:i-1, ]
+                                        
+                                        if(sum(scores$cells)>nr.cells){
+                                          neg <- sum(scores$cells)-nr.cells
+                                          scores$cells[nrow(scores)]= scores$cells[nrow(scores)]-neg
+                                        }
+                                        
+                                        cells_add <- map(.x=1:nrow(scores),.f=function(i){
+                                          rep(rownames(scores)[i], scores$cells[i])}) %>% unlist()
+                                        
+                                        out$celltypes <- cells_add
+                                        
+                                        return(out)
+                                      },
+                        .progress = T)
+  
+  
+  #Align Coords
+  Cell_types <- Cell_types %>% dplyr::left_join(., sc_dat %>% dplyr::rename("cells":=Cell), by="cells")
+  
+  return(Cell_types)
+  
+  
+}
+
+
+
+
+
+
 
 ###############################################################
 ###########   Seurat add on Functions
@@ -327,7 +397,12 @@ DownScaleSeurat <- function(seurat,
   }) %>% unlist()
 
   seurat.out <- subset(seurat, cells=cells)
-  seurat.out <- Seurat::SCTransform(seurat.out, return.only.var.genes=only_var, variable.features.n = n_feature)
+  seurat.out <- seurat.out %>% 
+    Seurat::FindVariableFeatures(variable.features.n = n_feature) %>% 
+    Seurat::ScaleData() %>% 
+    Seurat::NormalizeData()
+  
+  #seurat.out <- Seurat::SCTransform(seurat.out, return.only.var.genes=only_var, variable.features.n = n_feature)
 
 }
 
@@ -593,7 +668,7 @@ defineMetaSpace <- function(object,
 
   message("Get DE per cluster")
   Idents(reference) <- cell_type_var
-  diff_gene_exp <- Seurat::FindAllMarkers(reference, max.cells.per.ident = 500)
+  diff_gene_exp <- Seurat::FindAllMarkers(reference, max.cells.per.ident = 50)
 
   message("Get PC1 for variance")
   pca <- map(.x=1:length(annotations), .f=function(i){
@@ -1234,7 +1309,7 @@ runSegmentfromCoords <- function(object, Coord_file=NULL, spot_extension=0, mult
 
   if (multicore == T) {
     base::options(future.fork.enable = TRUE)
-    future::plan("multiprocess", workers = workers)
+    future::plan("multisession", workers = workers)
     future::supportsMulticore()
     base::options(future.globals.maxSize = 600 * 1024^2)
     message("... Run multicore ... ")
@@ -1298,6 +1373,89 @@ runSegmentfromCoords <- function(object, Coord_file=NULL, spot_extension=0, mult
 
 }
 
+
+#' @title  getSubColors
+#' @author Dieter Henrik Heiland
+#' @description Get summary of image intensity per spot
+#' @inherit
+#' @return data.frame with intensity per spot
+#' @examples
+#' @export
+#'
+getSubColors <- 
+  function (tab, 
+            class = "annotation_level_2", 
+            subclass = "annotation_level_4", 
+            external_pal =NULL,
+            muted=NULL,
+            pal = "Set3", 
+            max_pal = 12, 
+            random = T, 
+            seed = 200, 
+            into = "#EDEDED", 
+            add_n = 1) {
+    out <- 
+      tab %>% 
+      as.data.frame() %>% 
+      dplyr::group_by(!!sym(class), 
+                      !!sym(subclass)) %>% 
+      dplyr::summarise(n = length(!!sym(class)))
+    
+    class_unique <- unique(tab %>% pull(!!sym(class))) %>% as.character()
+    
+    ## Colors:
+    
+    if(!is.null(external_pal)){
+      color_L1 <- external_pal
+      if(length(color_L1) != length(unique(out$class)))stop("Number of colors in the external pal does not match with the number of classes")
+    }else{
+      
+      if (length(class_unique) > max_pal) {
+        color <- RColorBrewer::brewer.pal(max_pal, pal)
+        color_L1 <- colorRampPalette(color)(length(class_unique))
+      }
+      else {
+        color_L1 <- RColorBrewer::brewer.pal(length(class_unique), 
+                                             pal)
+      }
+      
+    }
+    
+    if (random == T) {
+      set.seed(seed)
+      color_L1 <- sample(color_L1)
+    }
+    
+    #Run color mapping:
+    
+    out2 <- map_dfr(.x = 1:length(class_unique), .f = function(i) {
+      
+      x <- out %>% dplyr::filter(!!sym(class) == class_unique[i])
+      a <- nrow(x)
+      
+      if(!is.null(muted)){
+        into <- color_L1[i] %>% scales::muted(muted[1],muted[2])
+      }
+      
+      x <- 
+        x %>% 
+        dplyr::mutate(colors = c(colorRampPalette(color = c(into, color_L1[i]))(a + add_n)[c(1 + add_n):c(a + add_n)]))
+    })
+    
+    all <- out %>% dplyr::pull(!!sym(subclass)) %>% unique()
+    withcolor <- out2 %>% dplyr::pull(!!sym(subclass)) %>% unique()
+    inter <- intersect(withcolor, all)
+    if (length(all[!all %in% inter]) > 0) {
+      out3 <- data.frame(a = "NaN", b = all[!all %in% inter], 
+                         n = 1, colors = into)
+      names(out3) <- names(out2)
+      out_4 <- rbind(out2, out3) %>% dplyr::ungroup()
+    }
+    else {
+      out_4 <- out2
+    }
+    return(out_4)
+  }
 
 
 

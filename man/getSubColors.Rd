@@ -8,6 +8,22 @@ getSubColors(
   tab,
   class = "annotation_level_2",
   subclass = "annotation_level_4",
+  external_pal = NULL,
+  muted = NULL,
+  pal = "Set3",
+  max_pal = 12,
+  random = T,
+  seed = 200,
+  into = "#EDEDED",
+  add_n = 1
+)
+
+getSubColors(
+  tab,
+  class = "annotation_level_2",
+  subclass = "annotation_level_4",
+  external_pal = NULL,
+  muted = NULL,
   pal = "Set3",
   max_pal = 12,
   random = T,
@@ -33,8 +49,13 @@ getSubColors(
 
 \item{add_n}{Integer value. Adopting the contrast of the subclass colors}
 }
+\value{
+data.frame with intensity per spot
+}
 \description{
 Mapping the output of "getSingleCellDeconv()"to the best matching cell from the reference dataset
+
+Get summary of image intensity per spot
 }
 \author{
 Dieter Henrik Heiland
