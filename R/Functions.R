@@ -288,6 +288,15 @@ getSingleCellDeconv <- function(object,
 }
 
 
+
+#' @title  getCellperSpot
+#' @author Dieter Henrik Heiland
+#' @description getCellperSpot
+#' @inherit
+#' @return
+#' @examples
+#' @export
+#
 getCellperSpot <- function(object,
                            deconv_cell_types,
                            segments){
